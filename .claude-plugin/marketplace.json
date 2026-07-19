@@ -1,6 +1,6 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
-  "name": "claude-marketplace",
+  "name": "arnaud-pourbaix-marketplace",
   "description": "Arnaud Pourbaix's personal Claude Code plugin marketplace",
   "owner": {
     "name": "Arnaud Pourbaix",
