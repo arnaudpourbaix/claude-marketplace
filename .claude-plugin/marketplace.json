@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-marketplace",
+  "description": "Arnaud Pourbaix's personal Claude Code plugin marketplace",
+  "owner": {
+    "name": "Arnaud Pourbaix",
+    "email": "pourbaix.arnaud@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "weidu",
+      "description": "Tools for maintaining WeiDU/Infinity Engine mod installations (Baldur's Gate, BG2, IWD, Planescape, EET, etc.), including checking installed mods against their upstream GitHub sources.",
+      "author": {
+        "name": "Arnaud Pourbaix",
+        "email": "pourbaix.arnaud@gmail.com"
+      },
+      "source": "./plugins/weidu",
+      "category": "development"
+    }
+  ]
+}
