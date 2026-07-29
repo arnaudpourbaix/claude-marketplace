@@ -127,3 +127,39 @@ test('diffCreatures ignores a row that matches destination exactly', () => {
   assert.deepEqual(newRows, []);
   assert.deepEqual(changedRows, []);
 });
+
+const { formatDestinationCsv, formatChangeLog } = require('./lib');
+
+test('formatDestinationCsv writes the header, existing rows, then new rows', () => {
+  const existingRows = [{
+    file: 'AATAQAH', name: 'Aataqah', general: 'GIANTHUMANOID', race: 'GENIE',
+    class: 'GENIE_DJINNI', anim: 'DJINNI', deathvar: 'aataqah', dialog: 'aataqah', origin: 'base',
+  }];
+  const newRows = [{
+    file: 'NEWCRE01', name: 'New Guy', general: 'HUMANOID', race: 'HUMAN',
+    class: 'FIGHTER', anim: 'MHM1', deathvar: 'newcre01', dialog: 'newcre01', origin: 'cdtweaks',
+  }];
+  const text = formatDestinationCsv(existingRows, newRows);
+  const lines = text.trim().split('\n');
+  assert.equal(lines[0], 'file;name;general;race;class;anim;deathvar;dialog;origin');
+  assert.equal(lines[1], 'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base');
+  assert.equal(lines[2], 'NEWCRE01;"New Guy";HUMANOID;HUMAN;FIGHTER;MHM1;newcre01;newcre01;cdtweaks');
+});
+
+test('formatChangeLog renders one block per changed creature with old -> new values', () => {
+  const changedRows = [{
+    file: 'AATAQAH',
+    changes: [{ field: 'class', oldValue: 'GENIE_DJINNI', newValue: 'GENIE_EFREET' }],
+  }];
+  const text = formatChangeLog('cdtweaks', changedRows);
+  assert.equal(text, 'AATAQAH\n  class: GENIE_DJINNI -> GENIE_EFREET\n');
+});
+
+test('formatChangeLog separates multiple changed creatures with a blank line', () => {
+  const changedRows = [
+    { file: 'AATAQAH', changes: [{ field: 'class', oldValue: 'A', newValue: 'B' }] },
+    { file: 'ABAZIGAL', changes: [{ field: 'anim', oldValue: 'X', newValue: 'Y' }] },
+  ];
+  const text = formatChangeLog('cdtweaks', changedRows);
+  assert.equal(text, 'AATAQAH\n  class: A -> B\n\nABAZIGAL\n  anim: X -> Y\n');
+});

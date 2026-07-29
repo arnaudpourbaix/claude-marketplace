@@ -103,6 +103,24 @@ function diffCreatures(inputRows, destination, origin) {
   return { newRows, changedRows };
 }
 
+function formatDestinationCsv(existingRows, newRows) {
+  const allRows = [...existingRows, ...newRows];
+  const lines = [DESTINATION_HEADER];
+  for (const row of allRows) {
+    const fields = DESTINATION_COLUMNS.map((col) => row[col]);
+    lines.push(joinCsvLine(fields, [1]));
+  }
+  return lines.join('\n') + '\n';
+}
+
+function formatChangeLog(origin, changedRows) {
+  const blocks = changedRows.map((entry) => {
+    const changeLines = entry.changes.map((c) => `  ${c.field}: ${c.oldValue} -> ${c.newValue}`);
+    return [entry.file, ...changeLines].join('\n');
+  });
+  return blocks.join('\n\n') + '\n';
+}
+
 module.exports = {
   DESTINATION_HEADER,
   DESTINATION_COLUMNS,
@@ -114,4 +132,6 @@ module.exports = {
   parseInput,
   deriveOrigin,
   diffCreatures,
+  formatDestinationCsv,
+  formatChangeLog,
 };
