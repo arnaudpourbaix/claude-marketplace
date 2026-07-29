@@ -89,6 +89,18 @@ test('parseInput preserves a name containing an unescaped embedded quote', () =>
   assert.deepEqual(warnings, []);
 });
 
+test('parseInput warns and skips a repeated header line appearing mid-file', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n' +
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;Bertrand\r\n';
+  const { rows, warnings } = parseInput(text, 'test.csv');
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.map((r) => r.file), ['AATAQAH', 'BERTRAND']);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /test\.csv:3: repeated header line/);
+});
+
 test('parseInput warns and skips a row with too few columns', () => {
   const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
     'BADROW;ONLYTWO\r\n';

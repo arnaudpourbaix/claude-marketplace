@@ -15,6 +15,7 @@ function joinCsvLine(fields) {
 const DESTINATION_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'origin', 'name'];
 const DESTINATION_HEADER = DESTINATION_COLUMNS.join(';');
 const INPUT_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'name'];
+const INPUT_HEADER = INPUT_COLUMNS.join(';');
 
 function parseDestination(text) {
   const rows = [];
@@ -39,6 +40,10 @@ function parseInput(text, sourceLabel) {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (line.length === 0) continue;
+    if (line === INPUT_HEADER) {
+      warnings.push(`${sourceLabel}:${i + 1}: repeated header line — skipped`);
+      continue;
+    }
     const fields = splitCsvLine(line, INPUT_COLUMNS.length);
     if (fields.length !== INPUT_COLUMNS.length) {
       warnings.push(`${sourceLabel}:${i + 1}: expected ${INPUT_COLUMNS.length} columns, got ${fields.length} — skipped`);
@@ -99,6 +104,7 @@ module.exports = {
   DESTINATION_HEADER,
   DESTINATION_COLUMNS,
   INPUT_COLUMNS,
+  INPUT_HEADER,
   COMPARE_FIELDS,
   splitCsvLine,
   joinCsvLine,
