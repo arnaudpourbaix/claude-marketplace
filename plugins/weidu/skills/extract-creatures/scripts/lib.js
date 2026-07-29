@@ -1,5 +1,3 @@
-const path = require('path');
-
 function splitCsvLine(line, fieldCount) {
   const parts = line.split(';');
   if (fieldCount && parts.length > fieldCount) {
@@ -51,10 +49,6 @@ function parseInput(text, sourceLabel) {
     rows.push(row);
   }
   return { rows, warnings };
-}
-
-function deriveOrigin(inputPath) {
-  return path.basename(inputPath, path.extname(inputPath));
 }
 
 const COMPARE_FIELDS = ['general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
@@ -110,7 +104,6 @@ module.exports = {
   joinCsvLine,
   parseDestination,
   parseInput,
-  deriveOrigin,
   diffCreatures,
   formatDestinationCsv,
   formatChangeLog,

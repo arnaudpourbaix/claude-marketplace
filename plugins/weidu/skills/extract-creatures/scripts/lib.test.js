@@ -5,7 +5,6 @@ const {
   joinCsvLine,
   parseDestination,
   parseInput,
-  deriveOrigin,
   diffCreatures,
   formatDestinationCsv,
   formatChangeLog,
@@ -109,11 +108,6 @@ test('parseInput reports the correct line number even when a blank line precedes
   assert.equal(rows[0].file, 'AAA');
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /test\.csv:4/);
-});
-
-test('deriveOrigin strips the directory and extension', () => {
-  assert.equal(deriveOrigin('/some/path/cdtweaks.csv'), 'cdtweaks');
-  assert.equal(deriveOrigin('base.csv'), 'base');
 });
 
 test('diffCreatures treats a file missing from destination as new, tagged with origin', () => {

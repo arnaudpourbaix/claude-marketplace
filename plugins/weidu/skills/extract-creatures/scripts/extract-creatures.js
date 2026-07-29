@@ -4,41 +4,40 @@ const path = require('path');
 const {
   parseDestination,
   parseInput,
-  deriveOrigin,
   diffCreatures,
   formatDestinationCsv,
   formatChangeLog,
 } = require('./lib');
 
 function parseArgs(argv) {
-  let input = null;
+  let origin = null;
   let destination = null;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--input') {
-      input = argv[++i];
+    if (argv[i] === '--origin') {
+      origin = argv[++i];
     } else if (argv[i] === '--destination') {
       destination = argv[++i];
     }
   }
-  if (!input) {
-    throw new Error('--input <path> is required');
+  if (!origin) {
+    throw new Error('--origin <name> is required');
   }
   return {
-    input,
+    origin,
     destination: destination || path.join('extract', 'csv', 'creatures.csv'),
   };
 }
 
-function run({ inputPath, destinationPath }) {
-  if (!fs.existsSync(inputPath)) {
-    throw new Error(`input file not found: ${inputPath}`);
-  }
+function run({ origin, destinationPath }) {
   const destinationDir = path.dirname(destinationPath);
   if (!fs.existsSync(destinationDir)) {
     throw new Error(`destination directory not found: ${destinationDir}`);
   }
+  const inputPath = path.join(destinationDir, 'source.csv');
+  if (!fs.existsSync(inputPath)) {
+    throw new Error(`input file not found: ${inputPath}`);
+  }
 
-  const origin = deriveOrigin(inputPath);
   const inputText = fs.readFileSync(inputPath, 'utf8');
   const destinationText = fs.existsSync(destinationPath)
     ? fs.readFileSync(destinationPath, 'utf8')
@@ -72,8 +71,8 @@ function run({ inputPath, destinationPath }) {
 
 function main() {
   try {
-    const { input, destination } = parseArgs(process.argv.slice(2));
-    const { summary, warnings } = run({ inputPath: input, destinationPath: destination });
+    const { origin, destination } = parseArgs(process.argv.slice(2));
+    const { summary, warnings } = run({ origin, destinationPath: destination });
     for (const w of warnings) console.warn(w);
     console.log(summary);
   } catch (err) {
