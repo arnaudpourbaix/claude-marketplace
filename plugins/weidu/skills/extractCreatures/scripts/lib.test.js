@@ -78,3 +78,52 @@ test('parseInput reports correct line number even when blank lines precede a mal
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /test\.csv:4/);
 });
+
+const { diffCreatures } = require('./lib');
+
+test('diffCreatures treats a file missing from destination as new, tagged with origin', () => {
+  const destination = parseDestination('');
+  const { rows: inputRows } = parseInput(
+    'file;name;general;race;class;anim;deathvar;dialog\n' +
+    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah\n',
+    'cdtweaks.csv'
+  );
+  const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.equal(newRows.length, 1);
+  assert.equal(newRows[0].origin, 'cdtweaks');
+  assert.equal(newRows[0].file, 'AATAQAH');
+  assert.deepEqual(changedRows, []);
+});
+
+test('diffCreatures flags a field mismatch as changed without altering destination rows', () => {
+  const destination = parseDestination(
+    'file;name;general;race;class;anim;deathvar;dialog;origin\n' +
+    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base\n'
+  );
+  const { rows: inputRows } = parseInput(
+    'file;name;general;race;class;anim;deathvar;dialog\n' +
+    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah\n',
+    'cdtweaks.csv'
+  );
+  const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.deepEqual(newRows, []);
+  assert.equal(changedRows.length, 1);
+  assert.deepEqual(changedRows[0].changes, [
+    { field: 'class', oldValue: 'GENIE_DJINNI', newValue: 'GENIE_EFREET' },
+  ]);
+  assert.equal(destination.byFile.get('AATAQAH').class, 'GENIE_DJINNI');
+});
+
+test('diffCreatures ignores a row that matches destination exactly', () => {
+  const csv = 'file;name;general;race;class;anim;deathvar;dialog;origin\n' +
+    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base\n';
+  const destination = parseDestination(csv);
+  const { rows: inputRows } = parseInput(
+    'file;name;general;race;class;anim;deathvar;dialog\n' +
+    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah\n',
+    'cdtweaks.csv'
+  );
+  const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.deepEqual(newRows, []);
+  assert.deepEqual(changedRows, []);
+});

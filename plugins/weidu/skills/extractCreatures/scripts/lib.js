@@ -79,13 +79,39 @@ function deriveOrigin(inputPath) {
   return path.basename(inputPath, path.extname(inputPath));
 }
 
+const COMPARE_FIELDS = ['name', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
+
+function diffCreatures(inputRows, destination, origin) {
+  const newRows = [];
+  const changedRows = [];
+  for (const inputRow of inputRows) {
+    const existing = destination.byFile.get(inputRow.file);
+    if (!existing) {
+      newRows.push({ ...inputRow, origin });
+      continue;
+    }
+    const changes = [];
+    for (const field of COMPARE_FIELDS) {
+      if (existing[field] !== inputRow[field]) {
+        changes.push({ field, oldValue: existing[field], newValue: inputRow[field] });
+      }
+    }
+    if (changes.length > 0) {
+      changedRows.push({ file: inputRow.file, changes });
+    }
+  }
+  return { newRows, changedRows };
+}
+
 module.exports = {
   DESTINATION_HEADER,
   DESTINATION_COLUMNS,
   INPUT_COLUMNS,
+  COMPARE_FIELDS,
   splitCsvLine,
   joinCsvLine,
   parseDestination,
   parseInput,
   deriveOrigin,
+  diffCreatures,
 };
