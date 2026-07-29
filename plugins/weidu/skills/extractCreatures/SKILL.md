@@ -20,7 +20,7 @@ The `extract` WeiDU component dumps every `.cre` in `override/` to a semicolon-d
 4. Read the summary line:
    - New creatures are already appended to `creatures.csv` with `origin=cdtweaks`.
    - If any existing creature's fields changed, a `cdtweaks_changes.log` is written next to `creatures.csv` listing old vs. new values — `creatures.csv` itself is left untouched for those rows. Review the log and decide by hand how to reconcile it; the script never guesses.
-5. To bootstrap `creatures.csv` from scratch, run the script once with your base/vanilla extraction as `--input` against an empty (or nonexistent) destination — every row is "new" and gets `origin=base`.
+5. To bootstrap `creatures.csv` from scratch, run the script once with your base/vanilla extraction as `--input` against an empty (or nonexistent) destination — every row is "new" and gets `origin=base`. The destination's parent directory (e.g., `extract/csv/`) must already exist; only the destination file itself may be missing.
 
 ## Common Mistakes
 
