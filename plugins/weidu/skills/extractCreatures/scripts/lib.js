@@ -59,9 +59,11 @@ function parseDestination(text) {
 function parseInput(text, sourceLabel) {
   const rows = [];
   const warnings = [];
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  const lines = text.split(/\r?\n/);
   for (let i = 1; i < lines.length; i++) {
-    const fields = splitCsvLine(lines[i]);
+    const line = lines[i];
+    if (line.length === 0) continue;
+    const fields = splitCsvLine(line);
     if (fields.length !== INPUT_COLUMNS.length) {
       warnings.push(`${sourceLabel}:${i + 1}: expected ${INPUT_COLUMNS.length} columns, got ${fields.length} — skipped`);
       continue;

@@ -69,3 +69,12 @@ test('deriveOrigin strips the directory and extension', () => {
   assert.equal(deriveOrigin('/some/path/cdtweaks.csv'), 'cdtweaks');
   assert.equal(deriveOrigin('base.csv'), 'base');
 });
+
+test('parseInput reports correct line number even when blank lines precede a malformed row', () => {
+  const text = 'file;name;general;race;class;anim;deathvar;dialog\nAAA;"A";G;R;C;ANIM;DV;DLG\n\nBADROW;"Oops";ONLYTHREE\n';
+  const { rows, warnings } = parseInput(text, 'test.csv');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].file, 'AAA');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /test\.csv:4/);
+});
