@@ -149,6 +149,21 @@ test('diffCreatures flags a field mismatch as changed without altering destinati
   assert.equal(destination.byFile.get('AATAQAH').class, 'GENIE_DJINNI');
 });
 
+test('diffCreatures ignores a name-only difference — name is not a compared field', () => {
+  const destination = parseDestination(
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n'
+  );
+  const { rows: inputRows } = parseInput(
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Renamed Aataqah\r\n',
+    'cdtweaks.csv'
+  );
+  const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.deepEqual(newRows, []);
+  assert.deepEqual(changedRows, []);
+});
+
 test('diffCreatures ignores a row that matches destination exactly', () => {
   const csv = 'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
     'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n';

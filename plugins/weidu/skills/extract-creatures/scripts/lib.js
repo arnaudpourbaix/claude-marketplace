@@ -57,7 +57,7 @@ function deriveOrigin(inputPath) {
   return path.basename(inputPath, path.extname(inputPath));
 }
 
-const COMPARE_FIELDS = ['name', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
+const COMPARE_FIELDS = ['general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
 
 function diffCreatures(inputRows, destination, origin) {
   const newRows = [];
