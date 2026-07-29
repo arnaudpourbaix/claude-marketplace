@@ -815,5 +815,18 @@ git commit -m "docs(extractCreatures): add skill instructions"
 
 After Task 6, run the full test suite once more from the repo root:
 
-Run: `node --test plugins/weidu/skills/extractCreatures/scripts/`
-Expected: PASS — 26 tests passing, 0 failing.
+Run: `node --test plugins/weidu/skills/extractCreatures/scripts/lib.test.js plugins/weidu/skills/extractCreatures/scripts/extract-creatures.test.js`
+Expected: PASS, 0 failing. (`node --test` does not glob a directory reliably — pass explicit file paths.)
+
+## Post-Review Amendment (2026-07-29)
+
+The final whole-branch review (run against the user's real `base.csv`) found that the WeiDU `extract` component emits creature names with raw, unescaped embedded quotes (e.g. `Bertrand the "Companion"`), which this plan's original `splitCsvLine`/`joinCsvLine` design (RFC-4180-style `""` escaping) could not parse without corruption. The fix, applied after Task 6:
+
+- `extract.tp2` (outside this repo, in the game install) was changed to print `name` as the **last**, unquoted column: `file;general;race;class;anim;deathvar;dialog;name`.
+- The destination format became `file;general;race;class;anim;deathvar;dialog;origin;name` (origin before name, name still last).
+- `splitCsvLine`/`joinCsvLine` were redesigned around positional reconstruction (any extra `;`-split pieces merge back into the last field) instead of quote-state parsing.
+- Destination/change-log output now writes CRLF (`\r\n`) to match WeiDU's own line endings.
+- The CLI deletes a stale `<origin>_changes.log` when a previously-flagged change no longer applies.
+- The skill was renamed from `extractCreatures` to `extract-creatures` (kebab-case, matching the sibling `check-mod-versions` skill).
+
+See the final-review fix commits on top of Task 6 for the actual diff. This amendment is documentation only — task numbering above reflects the original plan as executed, not this later revision.
