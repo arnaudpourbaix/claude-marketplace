@@ -147,6 +147,8 @@ test('diffCreatures flags a field mismatch as changed without altering destinati
     { field: 'class', oldValue: 'GENIE_DJINNI', newValue: 'GENIE_EFREET' },
   ]);
   assert.equal(destination.byFile.get('AATAQAH').class, 'GENIE_DJINNI');
+  assert.equal(changedRows[0].updatedRow.class, 'GENIE_EFREET');
+  assert.equal(changedRows[0].updatedRow.origin, 'cdtweaks');
 });
 
 test('diffCreatures ignores a name-only difference — name is not a compared field', () => {

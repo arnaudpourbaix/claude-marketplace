@@ -75,7 +75,7 @@ function diffCreatures(inputRows, destination, origin) {
       }
     }
     if (changes.length > 0) {
-      changedRows.push({ file: inputRow.file, changes });
+      changedRows.push({ file: inputRow.file, changes, updatedRow: { ...inputRow, origin } });
     }
   }
   return { newRows, changedRows };

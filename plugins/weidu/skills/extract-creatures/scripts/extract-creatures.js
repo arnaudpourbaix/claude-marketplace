@@ -48,8 +48,10 @@ function run({ inputPath, destinationPath }) {
   const { rows: inputRows, warnings } = parseInput(inputText, inputPath);
   const { newRows, changedRows } = diffCreatures(inputRows, destination, origin);
 
-  if (newRows.length > 0) {
-    fs.writeFileSync(destinationPath, formatDestinationCsv(destination.rows, newRows));
+  if (newRows.length > 0 || changedRows.length > 0) {
+    const updatedByFile = new Map(changedRows.map((c) => [c.file, c.updatedRow]));
+    const updatedExistingRows = destination.rows.map((row) => updatedByFile.get(row.file) || row);
+    fs.writeFileSync(destinationPath, formatDestinationCsv(updatedExistingRows, newRows));
   }
 
   let logPath = null;
@@ -62,7 +64,7 @@ function run({ inputPath, destinationPath }) {
   }
 
   const summary = `${newRows.length} new creature(s) added (origin=${origin}), ` +
-    `${changedRows.length} changed creature(s) logged` +
+    `${changedRows.length} changed creature(s) applied and logged` +
     (logPath ? ` to ${logPath}` : '');
 
   return { summary, warnings };

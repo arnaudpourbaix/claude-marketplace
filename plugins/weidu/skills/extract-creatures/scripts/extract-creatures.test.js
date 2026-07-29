@@ -55,18 +55,18 @@ test('run appends a new creature with origin from the input filename, preserving
   const { summary } = run({ inputPath, destinationPath });
 
   assert.match(summary, /1 new creature\(s\) added \(origin=cdtweaks\)/);
-  assert.match(summary, /0 changed creature\(s\) logged$/);
+  assert.match(summary, /0 changed creature\(s\) applied and logged$/);
   const destText = fs.readFileSync(destinationPath, 'utf8');
   assert.match(destText, /BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;cdtweaks;Bertrand the "Companion"\r\n/);
   assert.equal(fs.existsSync(path.join(dir, 'cdtweaks_changes.log')), false);
 });
 
-test('run logs a changed creature without touching the destination row', () => {
+test('run applies a changed creature to the destination row (new origin, new value) and logs the change', () => {
   const dir = makeTmpDir();
   const destinationPath = path.join(dir, 'creatures.csv');
-  const originalLine = 'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah';
   fs.writeFileSync(destinationPath,
-    `file;general;race;class;anim;deathvar;dialog;origin;name\r\n${originalLine}\r\n`);
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n');
   const inputPath = path.join(dir, 'cdtweaks.csv');
   fs.writeFileSync(inputPath,
     'file;general;race;class;anim;deathvar;dialog;name\r\n' +
@@ -75,9 +75,10 @@ test('run logs a changed creature without touching the destination row', () => {
   const { summary } = run({ inputPath, destinationPath });
 
   assert.match(summary, /0 new creature\(s\) added \(origin=cdtweaks\)/);
-  assert.match(summary, /1 changed creature\(s\) logged to .*cdtweaks_changes\.log/);
+  assert.match(summary, /1 changed creature\(s\) applied and logged to .*cdtweaks_changes\.log/);
   const destText = fs.readFileSync(destinationPath, 'utf8');
-  assert.ok(destText.includes(originalLine));
+  assert.match(destText, /AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;cdtweaks;Aataqah\r\n/);
+  assert.ok(!destText.includes(';base;'));
   const logText = fs.readFileSync(path.join(dir, 'cdtweaks_changes.log'), 'utf8');
   assert.equal(logText, 'AATAQAH\r\n  class: GENIE_DJINNI -> GENIE_EFREET\r\n');
 });
@@ -97,7 +98,7 @@ test('run removes a stale change log from a prior run once the change no longer 
 
   const { summary } = run({ inputPath, destinationPath });
 
-  assert.match(summary, /0 changed creature\(s\) logged$/);
+  assert.match(summary, /0 changed creature\(s\) applied and logged$/);
   assert.equal(fs.existsSync(staleLogPath), false);
 });
 

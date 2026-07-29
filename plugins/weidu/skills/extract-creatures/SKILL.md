@@ -1,6 +1,6 @@
 ---
 name: extract-creatures
-description: Use after installing a WeiDU/Infinity Engine mod, once its creature files have been re-extracted with the extract component, to merge new creatures into the master creatures.csv (tagged with the mod that added them) and flag any creature the mod changed without silently overwriting prior data.
+description: Use after installing a WeiDU/Infinity Engine mod, once its creature files have been re-extracted with the extract component, to merge new creatures into the master creatures.csv (tagged with the mod that added them), applying and logging any field changes so later mods diff against the current state instead of a stale backlog.
 ---
 
 # Merging Creature Extractions
@@ -9,7 +9,7 @@ description: Use after installing a WeiDU/Infinity Engine mod, once its creature
 
 The `extract` WeiDU component dumps every `.cre` in `override/` to a semicolon-delimited CSV (`file;general;race;class;anim;deathvar;dialog;name` — `name` is always the last field, unquoted, so it can safely contain any character, including a literal `;` or `"`). Re-running it after each mod install produces a full snapshot of the current override folder — not just that mod's additions.
 
-`scripts/extract-creatures.js` compares that fresh snapshot against the accumulating master list (`extract/csv/creatures.csv`, with an added `origin` column placed just before `name`) so you know which mod introduced each creature, and flags anything a mod changed on a creature you already have without touching the master file.
+`scripts/extract-creatures.js` compares that fresh snapshot against the accumulating master list (`extract/csv/creatures.csv`, with an added `origin` column placed just before `name`) so you know which mod introduced each creature. When a mod changes an existing creature's `general`/`race`/`class`/`anim`/`deathvar`/`dialog` fields, the script applies the new values to `creatures.csv` (last mod processed wins) and logs the old-vs-new diff for visibility — it does NOT ask you to reconcile by hand. This keeps `creatures.csv` always reflecting your current install, and means later mods' logs report only what THEY changed, not a growing backlog of everything every prior mod already changed.
 
 ## Procedure
 
@@ -19,11 +19,11 @@ The `extract` WeiDU component dumps every `.cre` in `override/` to a semicolon-d
    (destination defaults to `extract/csv/creatures.csv` relative to the current directory if omitted).
 4. Read the summary line:
    - New creatures are already appended to `creatures.csv` with `origin=cdtweaks`.
-   - If any existing creature's `general`/`race`/`class`/`anim`/`deathvar`/`dialog` fields changed, a `cdtweaks_changes.log` is written next to `creatures.csv` listing old vs. new values — `creatures.csv` itself is left untouched for those rows. Review the log and decide how to reconcile it; the script never guesses. Once nothing about that mod's extraction differs anymore, its log file is removed automatically on the next run.
-   - A `name`-only difference is never logged — display-name changes are ignored, since they don't affect gameplay.
+   - Any existing creature whose `general`/`race`/`class`/`anim`/`deathvar`/`dialog` fields changed is updated in `creatures.csv` (its `origin` becomes `cdtweaks`) and the old-vs-new diff is written to `cdtweaks_changes.log` next to it, purely for visibility — nothing to reconcile by hand. If a creature two mods both touch looks wrong afterward, the log tells you what changed and when. Once a later run finds nothing left to flag for that origin, its log file is removed automatically.
+   - A `name`-only difference is never flagged or applied — display-name changes are ignored, since they don't affect gameplay.
 5. To bootstrap `creatures.csv` from scratch, run the script once with your base/vanilla extraction as `--input` against an empty (or nonexistent) destination — every row is "new" and gets `origin=base`. The destination's parent directory (e.g., `extract/csv/`) must already exist; only the destination file itself may be missing.
 
 ## Common Mistakes
 
 - Reusing the same input filename across two different mods — the `origin` label and the change log name both come from that filename, so each mod's extraction needs its own distinct name.
-- Expecting the script to resolve conflicting field values automatically — it never overwrites an existing destination row; that decision is manual.
+- Assuming a `_changes.log` means action is needed — it's an applied-change record, not a pending decision. Only check it if a creature looks wrong and you want to know which mod last touched it.
