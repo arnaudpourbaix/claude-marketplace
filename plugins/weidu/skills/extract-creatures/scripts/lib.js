@@ -1,44 +1,22 @@
 const path = require('path');
 
-function splitCsvLine(line) {
-  const fields = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (inQuotes) {
-      if (c === '"') {
-        if (line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        current += c;
-      }
-    } else if (c === '"') {
-      inQuotes = true;
-    } else if (c === ';') {
-      fields.push(current);
-      current = '';
-    } else {
-      current += c;
-    }
+function splitCsvLine(line, fieldCount) {
+  const parts = line.split(';');
+  if (fieldCount && parts.length > fieldCount) {
+    const head = parts.slice(0, fieldCount - 1);
+    const tail = parts.slice(fieldCount - 1).join(';');
+    return [...head, tail];
   }
-  fields.push(current);
-  return fields;
+  return parts;
 }
 
-function joinCsvLine(fields, quotedIndices = []) {
-  return fields
-    .map((f, i) => (quotedIndices.includes(i) ? `"${String(f).replace(/"/g, '""')}"` : f))
-    .join(';');
+function joinCsvLine(fields) {
+  return fields.join(';');
 }
 
-const DESTINATION_COLUMNS = ['file', 'name', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'origin'];
+const DESTINATION_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'origin', 'name'];
 const DESTINATION_HEADER = DESTINATION_COLUMNS.join(';');
-const INPUT_COLUMNS = ['file', 'name', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
+const INPUT_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'name'];
 
 function parseDestination(text) {
   const rows = [];
@@ -46,7 +24,7 @@ function parseDestination(text) {
   if (!text) return { rows, byFile };
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
   for (let i = 1; i < lines.length; i++) {
-    const fields = splitCsvLine(lines[i]);
+    const fields = splitCsvLine(lines[i], DESTINATION_COLUMNS.length);
     if (fields.length !== DESTINATION_COLUMNS.length) continue;
     const row = {};
     DESTINATION_COLUMNS.forEach((col, idx) => { row[col] = fields[idx]; });
@@ -63,7 +41,7 @@ function parseInput(text, sourceLabel) {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i];
     if (line.length === 0) continue;
-    const fields = splitCsvLine(line);
+    const fields = splitCsvLine(line, INPUT_COLUMNS.length);
     if (fields.length !== INPUT_COLUMNS.length) {
       warnings.push(`${sourceLabel}:${i + 1}: expected ${INPUT_COLUMNS.length} columns, got ${fields.length} — skipped`);
       continue;
@@ -103,22 +81,24 @@ function diffCreatures(inputRows, destination, origin) {
   return { newRows, changedRows };
 }
 
+const EOL = '\r\n';
+
 function formatDestinationCsv(existingRows, newRows) {
   const allRows = [...existingRows, ...newRows];
   const lines = [DESTINATION_HEADER];
   for (const row of allRows) {
     const fields = DESTINATION_COLUMNS.map((col) => row[col]);
-    lines.push(joinCsvLine(fields, [1]));
+    lines.push(joinCsvLine(fields));
   }
-  return lines.join('\n') + '\n';
+  return lines.join(EOL) + EOL;
 }
 
 function formatChangeLog(origin, changedRows) {
   const blocks = changedRows.map((entry) => {
     const changeLines = entry.changes.map((c) => `  ${c.field}: ${c.oldValue} -> ${c.newValue}`);
-    return [entry.file, ...changeLines].join('\n');
+    return [entry.file, ...changeLines].join(EOL);
   });
-  return blocks.join('\n\n') + '\n';
+  return blocks.join(EOL + EOL) + EOL;
 }
 
 module.exports = {

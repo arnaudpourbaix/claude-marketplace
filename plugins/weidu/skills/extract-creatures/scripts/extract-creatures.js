@@ -53,9 +53,12 @@ function run({ inputPath, destinationPath }) {
   }
 
   let logPath = null;
+  const potentialLogPath = path.join(destinationDir, `${origin}_changes.log`);
   if (changedRows.length > 0) {
-    logPath = path.join(destinationDir, `${origin}_changes.log`);
+    logPath = potentialLogPath;
     fs.writeFileSync(logPath, formatChangeLog(origin, changedRows));
+  } else if (fs.existsSync(potentialLogPath)) {
+    fs.unlinkSync(potentialLogPath);
   }
 
   const summary = `${newRows.length} new creature(s) added (origin=${origin}), ` +

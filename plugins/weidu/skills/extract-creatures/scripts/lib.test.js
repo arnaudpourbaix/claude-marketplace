@@ -1,30 +1,44 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { splitCsvLine, joinCsvLine, parseDestination, parseInput, deriveOrigin } = require('./lib');
+const {
+  splitCsvLine,
+  joinCsvLine,
+  parseDestination,
+  parseInput,
+  deriveOrigin,
+  diffCreatures,
+  formatDestinationCsv,
+  formatChangeLog,
+} = require('./lib');
 
-test('splitCsvLine splits unquoted fields on semicolon', () => {
-  const result = splitCsvLine('AATAQAH;GIANTHUMANOID;GENIE');
+test('splitCsvLine splits a line with exactly the expected field count', () => {
+  const result = splitCsvLine('AATAQAH;GIANTHUMANOID;GENIE', 3);
   assert.deepEqual(result, ['AATAQAH', 'GIANTHUMANOID', 'GENIE']);
 });
 
-test('splitCsvLine strips quotes from a quoted field', () => {
-  const result = splitCsvLine('AATAQAH;"Aataqah";GENIE');
-  assert.deepEqual(result, ['AATAQAH', 'Aataqah', 'GENIE']);
+test('splitCsvLine merges an extra semicolon-separated piece (e.g. an embedded quote) into the last field', () => {
+  const result = splitCsvLine('AATAQAH;GENIE;Bertrand the "Companion"', 3);
+  assert.deepEqual(result, ['AATAQAH', 'GENIE', 'Bertrand the "Companion"']);
 });
 
-test('splitCsvLine unescapes doubled quotes inside a quoted field', () => {
-  const result = splitCsvLine('AATAQAH;"Aa""taqah";GENIE');
-  assert.deepEqual(result, ['AATAQAH', 'Aa"taqah', 'GENIE']);
+test('splitCsvLine merges pieces split on an embedded semicolon in the last field', () => {
+  const result = splitCsvLine('AATAQAH;GENIE;Name; With; Semicolons', 3);
+  assert.deepEqual(result, ['AATAQAH', 'GENIE', 'Name; With; Semicolons']);
 });
 
-test('joinCsvLine quotes only the requested indices', () => {
-  const result = joinCsvLine(['AATAQAH', 'Aataqah', 'GENIE'], [1]);
-  assert.equal(result, 'AATAQAH;"Aataqah";GENIE');
+test('splitCsvLine returns fewer fields than expected unchanged, for malformed-row detection', () => {
+  const result = splitCsvLine('AATAQAH;GENIE', 3);
+  assert.deepEqual(result, ['AATAQAH', 'GENIE']);
 });
 
-test('joinCsvLine escapes internal quotes in a quoted field', () => {
-  const result = joinCsvLine(['AATAQAH', 'Aa"taqah'], [1]);
-  assert.equal(result, 'AATAQAH;"Aa""taqah"');
+test('splitCsvLine without a fieldCount just splits on semicolon', () => {
+  const result = splitCsvLine('AATAQAH;GENIE;Aataqah');
+  assert.deepEqual(result, ['AATAQAH', 'GENIE', 'Aataqah']);
+});
+
+test('joinCsvLine joins fields with semicolons, unquoted', () => {
+  const result = joinCsvLine(['AATAQAH', 'GENIE', 'Bertrand the "Companion"']);
+  assert.equal(result, 'AATAQAH;GENIE;Bertrand the "Companion"');
 });
 
 test('parseDestination returns no rows for an empty string', () => {
@@ -34,44 +48,62 @@ test('parseDestination returns no rows for an empty string', () => {
 });
 
 test('parseDestination returns no rows for header-only text', () => {
-  const { rows } = parseDestination('file;name;general;race;class;anim;deathvar;dialog;origin\n');
+  const { rows } = parseDestination('file;general;race;class;anim;deathvar;dialog;origin;name\r\n');
   assert.deepEqual(rows, []);
 });
 
-test('parseDestination parses a data row and indexes it by file', () => {
-  const text = 'file;name;general;race;class;anim;deathvar;dialog;origin\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base\n';
+test('parseDestination parses a data row with an embedded quote in name, indexed by file', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;base;Bertrand the "Companion"\r\n';
   const { rows, byFile } = parseDestination(text);
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].name, 'Aataqah');
-  assert.equal(byFile.get('AATAQAH').origin, 'base');
+  assert.equal(rows[0].name, 'Bertrand the "Companion"');
+  assert.equal(byFile.get('BERTRAND').origin, 'base');
 });
 
-test('parseInput parses a data row without an origin column', () => {
-  const text = 'file;name;general;race;class;anim;deathvar;dialog\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah\n';
+test('parseDestination skips a malformed row without throwing, even after a blank line', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AAA;G;R;C;ANIM;DV;DLG;base;A\r\n' +
+    '\r\n' +
+    'BADROW;ONLYTHREE\r\n';
+  const { rows } = parseDestination(text);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].file, 'AAA');
+});
+
+test('parseInput parses a data row without an origin column, name last', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n';
   const { rows, warnings } = parseInput(text, 'test.csv');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].file, 'AATAQAH');
+  assert.equal(rows[0].name, 'Aataqah');
   assert.deepEqual(warnings, []);
 });
 
-test('parseInput warns and skips a row with the wrong column count', () => {
-  const text = 'file;name;general;race;class;anim;deathvar;dialog\n' +
-    'BADROW;"Oops";ONLYTHREE\n';
+test('parseInput preserves a name containing an unescaped embedded quote', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;Bertrand the "Companion"\r\n';
+  const { rows, warnings } = parseInput(text, 'test.csv');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, 'Bertrand the "Companion"');
+  assert.deepEqual(warnings, []);
+});
+
+test('parseInput warns and skips a row with too few columns', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'BADROW;ONLYTWO\r\n';
   const { rows, warnings } = parseInput(text, 'test.csv');
   assert.equal(rows.length, 0);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /test\.csv:2/);
 });
 
-test('deriveOrigin strips the directory and extension', () => {
-  assert.equal(deriveOrigin('/some/path/cdtweaks.csv'), 'cdtweaks');
-  assert.equal(deriveOrigin('base.csv'), 'base');
-});
-
-test('parseInput reports correct line number even when blank lines precede a malformed row', () => {
-  const text = 'file;name;general;race;class;anim;deathvar;dialog\nAAA;"A";G;R;C;ANIM;DV;DLG\n\nBADROW;"Oops";ONLYTHREE\n';
+test('parseInput reports the correct line number even when a blank line precedes a malformed row', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AAA;G;R;C;ANIM;DV;DLG;A\r\n' +
+    '\r\n' +
+    'BADROW;ONLYTWO\r\n';
   const { rows, warnings } = parseInput(text, 'test.csv');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].file, 'AAA');
@@ -79,13 +111,16 @@ test('parseInput reports correct line number even when blank lines precede a mal
   assert.match(warnings[0], /test\.csv:4/);
 });
 
-const { diffCreatures } = require('./lib');
+test('deriveOrigin strips the directory and extension', () => {
+  assert.equal(deriveOrigin('/some/path/cdtweaks.csv'), 'cdtweaks');
+  assert.equal(deriveOrigin('base.csv'), 'base');
+});
 
 test('diffCreatures treats a file missing from destination as new, tagged with origin', () => {
   const destination = parseDestination('');
   const { rows: inputRows } = parseInput(
-    'file;name;general;race;class;anim;deathvar;dialog\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah\n',
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n',
     'cdtweaks.csv'
   );
   const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
@@ -97,12 +132,12 @@ test('diffCreatures treats a file missing from destination as new, tagged with o
 
 test('diffCreatures flags a field mismatch as changed without altering destination rows', () => {
   const destination = parseDestination(
-    'file;name;general;race;class;anim;deathvar;dialog;origin\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base\n'
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n'
   );
   const { rows: inputRows } = parseInput(
-    'file;name;general;race;class;anim;deathvar;dialog\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah\n',
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;Aataqah\r\n',
     'cdtweaks.csv'
   );
   const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
@@ -115,12 +150,12 @@ test('diffCreatures flags a field mismatch as changed without altering destinati
 });
 
 test('diffCreatures ignores a row that matches destination exactly', () => {
-  const csv = 'file;name;general;race;class;anim;deathvar;dialog;origin\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base\n';
+  const csv = 'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n';
   const destination = parseDestination(csv);
   const { rows: inputRows } = parseInput(
-    'file;name;general;race;class;anim;deathvar;dialog\n' +
-    'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah\n',
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n',
     'cdtweaks.csv'
   );
   const { newRows, changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
@@ -128,31 +163,30 @@ test('diffCreatures ignores a row that matches destination exactly', () => {
   assert.deepEqual(changedRows, []);
 });
 
-const { formatDestinationCsv, formatChangeLog } = require('./lib');
-
-test('formatDestinationCsv writes the header, existing rows, then new rows', () => {
+test('formatDestinationCsv writes the header, existing rows, then new rows, CRLF-joined, name last unquoted', () => {
   const existingRows = [{
-    file: 'AATAQAH', name: 'Aataqah', general: 'GIANTHUMANOID', race: 'GENIE',
-    class: 'GENIE_DJINNI', anim: 'DJINNI', deathvar: 'aataqah', dialog: 'aataqah', origin: 'base',
+    file: 'AATAQAH', general: 'GIANTHUMANOID', race: 'GENIE',
+    class: 'GENIE_DJINNI', anim: 'DJINNI', deathvar: 'aataqah', dialog: 'aataqah', origin: 'base', name: 'Aataqah',
   }];
   const newRows = [{
-    file: 'NEWCRE01', name: 'New Guy', general: 'HUMANOID', race: 'HUMAN',
-    class: 'FIGHTER', anim: 'MHM1', deathvar: 'newcre01', dialog: 'newcre01', origin: 'cdtweaks',
+    file: 'BERTRAND', general: 'HUMANOID', race: 'HUMAN',
+    class: 'FIGHTER', anim: 'MHM1', deathvar: 'bertrand', dialog: 'bertrand', origin: 'cdtweaks', name: 'Bertrand the "Companion"',
   }];
   const text = formatDestinationCsv(existingRows, newRows);
-  const lines = text.trim().split('\n');
-  assert.equal(lines[0], 'file;name;general;race;class;anim;deathvar;dialog;origin');
-  assert.equal(lines[1], 'AATAQAH;"Aataqah";GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base');
-  assert.equal(lines[2], 'NEWCRE01;"New Guy";HUMANOID;HUMAN;FIGHTER;MHM1;newcre01;newcre01;cdtweaks');
+  const lines = text.split('\r\n');
+  assert.equal(lines[0], 'file;general;race;class;anim;deathvar;dialog;origin;name');
+  assert.equal(lines[1], 'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah');
+  assert.equal(lines[2], 'BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;cdtweaks;Bertrand the "Companion"');
+  assert.equal(lines[3], '');
 });
 
-test('formatChangeLog renders one block per changed creature with old -> new values', () => {
+test('formatChangeLog renders one block per changed creature with old -> new values, CRLF-joined', () => {
   const changedRows = [{
     file: 'AATAQAH',
     changes: [{ field: 'class', oldValue: 'GENIE_DJINNI', newValue: 'GENIE_EFREET' }],
   }];
   const text = formatChangeLog('cdtweaks', changedRows);
-  assert.equal(text, 'AATAQAH\n  class: GENIE_DJINNI -> GENIE_EFREET\n');
+  assert.equal(text, 'AATAQAH\r\n  class: GENIE_DJINNI -> GENIE_EFREET\r\n');
 });
 
 test('formatChangeLog separates multiple changed creatures with a blank line', () => {
@@ -161,5 +195,5 @@ test('formatChangeLog separates multiple changed creatures with a blank line', (
     { file: 'ABAZIGAL', changes: [{ field: 'anim', oldValue: 'X', newValue: 'Y' }] },
   ];
   const text = formatChangeLog('cdtweaks', changedRows);
-  assert.equal(text, 'AATAQAH\n  class: A -> B\n\nABAZIGAL\n  anim: X -> Y\n');
+  assert.equal(text, 'AATAQAH\r\n  class: A -> B\r\n\r\nABAZIGAL\r\n  anim: X -> Y\r\n');
 });
