@@ -815,7 +815,7 @@ git commit -m "docs(extractCreatures): add skill instructions"
 
 After Task 6, run the full test suite once more from the repo root:
 
-Run: `node --test plugins/weidu/skills/extractCreatures/scripts/lib.test.js plugins/weidu/skills/extractCreatures/scripts/extract-creatures.test.js`
+Run: `node --test plugins/weidu/skills/extract-creatures/scripts/lib.test.js plugins/weidu/skills/extract-creatures/scripts/extract-creatures.test.js`
 Expected: PASS, 0 failing. (`node --test` does not glob a directory reliably — pass explicit file paths.)
 
 ## Post-Review Amendment (2026-07-29)
