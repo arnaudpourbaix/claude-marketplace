@@ -3,12 +3,20 @@ const assert = require('node:assert/strict');
 const {
   splitCsvLine,
   joinCsvLine,
+  deriveDestinationColumns,
+  computeCompareFields,
   parseDestination,
   parseInput,
+  migrateDestination,
   diffCreatures,
   formatDestinationCsv,
   formatChangeLog,
 } = require('./lib');
+
+const WIDE_HEADER =
+  'file;general;race;class;anim;deathvar;dialog;level;gender;sex;allegiance;' +
+  'overrideScript;classScript;raceScript;generalScript;defaultScript;' +
+  'helmet;shield;lring;rring;amulet;weapon1;weapon2;weapon3;weapon4;xpv;name';
 
 test('splitCsvLine splits a line with exactly the expected field count', () => {
   const result = splitCsvLine('AATAQAH;GIANTHUMANOID;GENIE', 3);
@@ -195,7 +203,8 @@ test('formatDestinationCsv writes the header, existing rows, then new rows, CRLF
     file: 'BERTRAND', general: 'HUMANOID', race: 'HUMAN',
     class: 'FIGHTER', anim: 'MHM1', deathvar: 'bertrand', dialog: 'bertrand', origin: 'cdtweaks', name: 'Bertrand the "Companion"',
   }];
-  const text = formatDestinationCsv(existingRows, newRows);
+  const columns = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'origin', 'name'];
+  const text = formatDestinationCsv(existingRows, newRows, columns);
   const lines = text.split('\r\n');
   assert.equal(lines[0], 'file;general;race;class;anim;deathvar;dialog;origin;name');
   assert.equal(lines[1], 'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah');
@@ -219,4 +228,118 @@ test('formatChangeLog separates multiple changed creatures with a blank line', (
   ];
   const text = formatChangeLog('cdtweaks', changedRows);
   assert.equal(text, 'AATAQAH\r\n  class: A -> B\r\n\r\nABAZIGAL\r\n  anim: X -> Y\r\n');
+});
+
+test('parseInput takes the first non-empty line as the header (extract prefixes a blank line)', () => {
+  const text = '\r\n' +
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n';
+  const { rows, warnings, columns } = parseInput(text, 'source.csv');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].file, 'AATAQAH');
+  assert.deepEqual(warnings, []);
+  assert.equal(columns[0], 'file');
+  assert.equal(columns[columns.length - 1], 'name');
+});
+
+test('parseInput derives an arbitrary wide column set from the header', () => {
+  const text = WIDE_HEADER + '\r\n' +
+    'A;HUMANOID;ELF;SORCERER;MAGE_MALE_ELF;BAELOTH;BAELOTH;6;MALE;MALE;NEUTRAL;' +
+    'BAELOTH;;;;;;;;BARING;;STAF02;DART11;;;0;Baeloth\r\n';
+  const { rows, warnings, columns } = parseInput(text, 'source.csv');
+  assert.deepEqual(warnings, []);
+  assert.equal(columns.length, 27);
+  assert.equal(rows[0].level, '6');
+  assert.equal(rows[0].allegiance, 'NEUTRAL');
+  assert.equal(rows[0].weapon1, 'STAF02');
+  assert.equal(rows[0].xpv, '0');
+  assert.equal(rows[0].name, 'Baeloth');
+});
+
+test('parseInput normalizes an <Invalid Strref -1> name to an empty string', () => {
+  const text = 'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;<Invalid Strref -1>\r\n';
+  const { rows, warnings } = parseInput(text, 'source.csv');
+  assert.equal(rows[0].name, '');
+  assert.deepEqual(warnings, []);
+});
+
+test('deriveDestinationColumns inserts origin just before the trailing name column', () => {
+  assert.deepEqual(
+    deriveDestinationColumns(['file', 'general', 'name']),
+    ['file', 'general', 'origin', 'name']
+  );
+});
+
+test('computeCompareFields is every input column except key and name, when bootstrapping', () => {
+  assert.deepEqual(
+    computeCompareFields(['file', 'general', 'race', 'name'], []),
+    ['general', 'race']
+  );
+});
+
+test('computeCompareFields excludes input columns absent from an existing destination', () => {
+  const inputColumns = ['file', 'general', 'xpv', 'name'];
+  const destColumns = ['file', 'general', 'origin', 'name'];
+  assert.deepEqual(computeCompareFields(inputColumns, destColumns), ['general']);
+});
+
+test('diffCreatures flags a change in a newly added column when both sides carry it', () => {
+  const destination = parseDestination(
+    'file;general;xpv;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;1400;base;Aataqah\r\n'
+  );
+  const { rows: inputRows, columns } = parseInput(
+    'file;general;xpv;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;3000;Aataqah\r\n',
+    'scs.csv'
+  );
+  const { newRows, changedRows } = diffCreatures(inputRows, destination, 'stratagems', {
+    keyField: 'file',
+    compareFields: computeCompareFields(columns, destination.columns),
+  });
+  assert.deepEqual(newRows, []);
+  assert.deepEqual(changedRows[0].changes, [
+    { field: 'xpv', oldValue: '1400', newValue: '3000' },
+  ]);
+  assert.equal(changedRows[0].updatedRow.origin, 'stratagems');
+});
+
+test('migrateDestination realigns rows to a wider layout, backfilling from the extraction, no change flagged', () => {
+  const destination = parseDestination(
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n'
+  );
+  const { rows: inputRows, columns: inputColumns } = parseInput(
+    'file;general;race;class;anim;deathvar;dialog;xpv;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;1400;Aataqah\r\n',
+    'source.csv'
+  );
+  const originalDestColumns = destination.columns;
+  const wanted = deriveDestinationColumns(inputColumns);
+  const migrated = migrateDestination(destination, wanted, inputRows, 'file');
+  assert.equal(migrated, true);
+  assert.deepEqual(destination.columns, wanted);
+  assert.equal(destination.byFile.get('AATAQAH').xpv, '1400');
+
+  const { changedRows } = diffCreatures(inputRows, destination, 'stratagems', {
+    keyField: 'file',
+    compareFields: computeCompareFields(inputColumns, originalDestColumns),
+  });
+  assert.deepEqual(changedRows, []);
+});
+
+test('migrateDestination is a no-op when the layout already matches', () => {
+  const destination = parseDestination(
+    'file;general;origin;name\r\n' +
+    'AAA;G;base;A\r\n'
+  );
+  const migrated = migrateDestination(destination, ['file', 'general', 'origin', 'name'], [], 'file');
+  assert.equal(migrated, false);
+});
+
+test('formatDestinationCsv emits empty strings for columns missing on a row', () => {
+  const columns = ['file', 'general', 'xpv', 'origin', 'name'];
+  const text = formatDestinationCsv([{ file: 'AAA', general: 'G', origin: 'base', name: 'A' }], [], columns);
+  assert.equal(text.split('\r\n')[1], 'AAA;G;;base;A');
 });

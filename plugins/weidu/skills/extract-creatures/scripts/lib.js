@@ -1,3 +1,7 @@
+const ORIGIN_COLUMN = 'origin';
+const INVALID_STRREF_NAME = '<Invalid Strref -1>';
+const EOL = '\r\n';
+
 function splitCsvLine(line, fieldCount) {
   const parts = line.split(';');
   if (fieldCount && parts.length > fieldCount) {
@@ -12,82 +16,143 @@ function joinCsvLine(fields) {
   return fields.join(';');
 }
 
-const DESTINATION_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'origin', 'name'];
-const DESTINATION_HEADER = DESTINATION_COLUMNS.join(';');
-const INPUT_COLUMNS = ['file', 'general', 'race', 'class', 'anim', 'deathvar', 'dialog', 'name'];
-const INPUT_HEADER = INPUT_COLUMNS.join(';');
-
-function parseDestination(text) {
-  const rows = [];
-  const byFile = new Map();
-  if (!text) return { rows, byFile };
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
-  for (let i = 1; i < lines.length; i++) {
-    const fields = splitCsvLine(lines[i], DESTINATION_COLUMNS.length);
-    if (fields.length !== DESTINATION_COLUMNS.length) continue;
-    const row = {};
-    DESTINATION_COLUMNS.forEach((col, idx) => { row[col] = fields[idx]; });
-    rows.push(row);
-    byFile.set(row.file, row);
-  }
-  return { rows, byFile };
+// The destination (creatures.csv) carries every input column plus an `origin`
+// column inserted just before the trailing name column.
+function deriveDestinationColumns(inputColumns) {
+  if (inputColumns.length < 2) return [...inputColumns];
+  const head = inputColumns.slice(0, -1);
+  const nameCol = inputColumns[inputColumns.length - 1];
+  return [...head, ORIGIN_COLUMN, nameCol];
 }
 
+// Fields whose changes are tracked: everything except the key (first column)
+// and the display name (last column). When migrating an existing destination
+// that predates some input columns, only columns already present in that
+// destination are compared — brand-new columns have no prior value to diff.
+function computeCompareFields(inputColumns, destinationColumns) {
+  const middle = inputColumns.slice(1, -1);
+  if (!destinationColumns || destinationColumns.length === 0) return middle;
+  const destSet = new Set(destinationColumns);
+  return middle.filter((col) => destSet.has(col));
+}
+
+// The extract component prefixes source.csv with a blank line, so the header is
+// the first *non-empty* line, not necessarily line 0. Column names come from
+// that header, so adding/removing columns in extract.tp2 needs no code change.
 function parseInput(text, sourceLabel) {
   const rows = [];
   const warnings = [];
   const lines = text.split(/\r?\n/);
-  for (let i = 1; i < lines.length; i++) {
+  let headerLine = null;
+  let columns = null;
+  let nameCol = null;
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.length === 0) continue;
-    if (line === INPUT_HEADER) {
+    if (columns === null) {
+      headerLine = line;
+      columns = line.split(';');
+      nameCol = columns[columns.length - 1];
+      continue;
+    }
+    if (line === headerLine) {
       warnings.push(`${sourceLabel}:${i + 1}: repeated header line — skipped`);
       continue;
     }
-    const fields = splitCsvLine(line, INPUT_COLUMNS.length);
-    if (fields.length !== INPUT_COLUMNS.length) {
-      warnings.push(`${sourceLabel}:${i + 1}: expected ${INPUT_COLUMNS.length} columns, got ${fields.length} — skipped`);
+    const fields = splitCsvLine(line, columns.length);
+    if (fields.length !== columns.length) {
+      warnings.push(`${sourceLabel}:${i + 1}: expected ${columns.length} columns, got ${fields.length} — skipped`);
       continue;
     }
     const row = {};
-    INPUT_COLUMNS.forEach((col, idx) => { row[col] = fields[idx]; });
+    columns.forEach((col, idx) => { row[col] = fields[idx]; });
+    if (row[nameCol] === INVALID_STRREF_NAME) row[nameCol] = '';
     rows.push(row);
   }
-  return { rows, warnings };
+  return { rows, warnings, columns: columns || [] };
 }
 
-const COMPARE_FIELDS = ['general', 'race', 'class', 'anim', 'deathvar', 'dialog'];
+function parseDestination(text) {
+  const rows = [];
+  const byFile = new Map();
+  const lines = (text || '').split(/\r?\n/).filter((l) => l.length > 0);
+  if (lines.length === 0) return { rows, byFile, columns: [] };
+  const columns = lines[0].split(';');
+  const keyCol = columns[0];
+  for (let i = 1; i < lines.length; i++) {
+    const fields = splitCsvLine(lines[i], columns.length);
+    if (fields.length !== columns.length) continue;
+    const row = {};
+    columns.forEach((col, idx) => { row[col] = fields[idx]; });
+    rows.push(row);
+    byFile.set(row[keyCol], row);
+  }
+  return { rows, byFile, columns };
+}
 
-function diffCreatures(inputRows, destination, origin) {
+// Reproject existing destination rows onto a new column layout: keep values for
+// columns that survive, backfill brand-new columns from the current extraction
+// (matched by key) or an empty string. Never reported as a per-creature change.
+function migrateDestination(destination, wantedColumns, inputRows, keyField) {
+  const originalColumns = destination.columns;
+  if (originalColumns.length === 0) return false;
+  if (originalColumns.join(';') === wantedColumns.join(';')) return false;
+
+  const originalSet = new Set(originalColumns);
+  const inputByKey = new Map(inputRows.map((r) => [r[keyField], r]));
+  destination.rows = destination.rows.map((row) => {
+    const src = inputByKey.get(row[keyField]);
+    const next = {};
+    for (const col of wantedColumns) {
+      if (originalSet.has(col)) {
+        next[col] = row[col] === undefined ? '' : row[col];
+      } else {
+        next[col] = src && src[col] !== undefined ? src[col] : '';
+      }
+    }
+    return next;
+  });
+  destination.byFile = new Map(destination.rows.map((r) => [r[keyField], r]));
+  destination.columns = [...wantedColumns];
+  return true;
+}
+
+function diffCreatures(inputRows, destination, origin, options = {}) {
+  const keyField = options.keyField || 'file';
+  const compareFields = options.compareFields
+    || (inputRows.length ? Object.keys(inputRows[0]).slice(1, -1) : []);
   const newRows = [];
   const changedRows = [];
   for (const inputRow of inputRows) {
-    const existing = destination.byFile.get(inputRow.file);
+    const existing = destination.byFile.get(inputRow[keyField]);
     if (!existing) {
-      newRows.push({ ...inputRow, origin });
+      newRows.push({ ...inputRow, [ORIGIN_COLUMN]: origin });
       continue;
     }
     const changes = [];
-    for (const field of COMPARE_FIELDS) {
-      if (existing[field] !== inputRow[field]) {
-        changes.push({ field, oldValue: existing[field], newValue: inputRow[field] });
+    for (const field of compareFields) {
+      const oldValue = existing[field] === undefined ? '' : existing[field];
+      const newValue = inputRow[field] === undefined ? '' : inputRow[field];
+      if (oldValue !== newValue) {
+        changes.push({ field, oldValue, newValue });
       }
     }
     if (changes.length > 0) {
-      changedRows.push({ file: inputRow.file, changes, updatedRow: { ...inputRow, origin } });
+      changedRows.push({
+        file: inputRow[keyField],
+        changes,
+        updatedRow: { ...existing, ...inputRow, [ORIGIN_COLUMN]: origin },
+      });
     }
   }
   return { newRows, changedRows };
 }
 
-const EOL = '\r\n';
-
-function formatDestinationCsv(existingRows, newRows) {
+function formatDestinationCsv(existingRows, newRows, columns) {
   const allRows = [...existingRows, ...newRows];
-  const lines = [DESTINATION_HEADER];
+  const lines = [columns.join(';')];
   for (const row of allRows) {
-    const fields = DESTINATION_COLUMNS.map((col) => row[col]);
-    lines.push(joinCsvLine(fields));
+    lines.push(columns.map((col) => (row[col] === undefined ? '' : row[col])).join(';'));
   }
   return lines.join(EOL) + EOL;
 }
@@ -101,15 +166,15 @@ function formatChangeLog(origin, changedRows) {
 }
 
 module.exports = {
-  DESTINATION_HEADER,
-  DESTINATION_COLUMNS,
-  INPUT_COLUMNS,
-  INPUT_HEADER,
-  COMPARE_FIELDS,
+  ORIGIN_COLUMN,
+  INVALID_STRREF_NAME,
   splitCsvLine,
   joinCsvLine,
-  parseDestination,
+  deriveDestinationColumns,
+  computeCompareFields,
   parseInput,
+  parseDestination,
+  migrateDestination,
   diffCreatures,
   formatDestinationCsv,
   formatChangeLog,
