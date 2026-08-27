@@ -74,6 +74,7 @@ function run({ origin, destinationPath, sourcePath, historyDir }) {
   }
 
   const destination = parseDestination(destinationText);
+  const bootstrapping = destination.rows.length === 0;
   const originalDestColumns = destination.columns;
   const wantedColumns = deriveDestinationColumns(inputColumns);
   const keyField = inputColumns[0];
@@ -97,10 +98,12 @@ function run({ origin, destinationPath, sourcePath, historyDir }) {
   const historyCsvPath = path.join(resolvedHistoryDir, `${seq}_${origin}.csv`);
   fs.copyFileSync(inputPath, historyCsvPath);
 
+  // Log this install's footprint (added + modified creatures). Skipped when
+  // bootstrapping — the 001 snapshot already *is* the full initial roster.
   let historyLogPath = null;
-  if (changedRows.length > 0) {
+  if (!bootstrapping && (newRows.length > 0 || changedRows.length > 0)) {
     historyLogPath = path.join(resolvedHistoryDir, `${seq}_${origin}_changes.log`);
-    fs.writeFileSync(historyLogPath, formatChangeLog(origin, changedRows));
+    fs.writeFileSync(historyLogPath, formatChangeLog(origin, newRows, changedRows));
   }
 
   const summary = `${newRows.length} new creature(s) added (origin=${origin}), ` +

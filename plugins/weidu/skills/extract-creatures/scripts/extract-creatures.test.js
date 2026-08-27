@@ -69,7 +69,8 @@ test('run appends a new creature with the given origin, preserving an embedded q
   assert.match(summary, /0 changed creature\(s\) applied;/);
   const destText = fs.readFileSync(destinationPath, 'utf8');
   assert.match(destText, /BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;cdtweaks;Bertrand the "Companion"\r\n/);
-  assert.equal(fs.existsSync(path.join(dir, 'history', '001_cdtweaks_changes.log')), false);
+  const logText = fs.readFileSync(path.join(dir, 'history', '001_cdtweaks_changes.log'), 'utf8');
+  assert.equal(logText, 'cdtweaks: 1 new, 0 changed\r\n\r\nNEW (1):\r\n  BERTRAND\r\n');
 });
 
 test('run applies a changed creature to the destination row (new origin, new value) and logs the change', () => {
@@ -90,7 +91,27 @@ test('run applies a changed creature to the destination row (new origin, new val
   assert.match(destText, /AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;cdtweaks;Aataqah\r\n/);
   assert.ok(!destText.includes(';base;'));
   const logText = fs.readFileSync(path.join(dir, 'history', '001_cdtweaks_changes.log'), 'utf8');
-  assert.equal(logText, 'AATAQAH\r\n  class: GENIE_DJINNI -> GENIE_EFREET\r\n');
+  assert.equal(logText,
+    'cdtweaks: 0 new, 1 changed\r\n\r\nCHANGED (1):\r\n  AATAQAH\r\n    class: GENIE_DJINNI -> GENIE_EFREET\r\n');
+});
+
+test('run writes a history log listing added resrefs for a mod that only adds creatures', () => {
+  const dir = makeTmpDir();
+  const destinationPath = path.join(dir, 'creatures.csv');
+  fs.writeFileSync(destinationPath,
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;bg1;Aataqah\r\n');
+  fs.writeFileSync(path.join(dir, 'source.csv'),
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n' +
+    'ACGNOLL1;HUMANOID;GNOLL;FIGHTER;GNOLL;acgnoll1;acgnoll1;Gnoll Chieftain\r\n' +
+    'ACGNOLL2;HUMANOID;GNOLL;FIGHTER;GNOLL;acgnoll2;acgnoll2;Gnoll Bodyguard\r\n');
+
+  const { summary } = run({ origin: 'ac_quest', destinationPath });
+
+  assert.match(summary, /2 new creature\(s\) added \(origin=ac_quest\)/);
+  const logText = fs.readFileSync(path.join(dir, 'history', '001_ac_quest_changes.log'), 'utf8');
+  assert.equal(logText, 'ac_quest: 2 new, 0 changed\r\n\r\nNEW (2):\r\n  ACGNOLL1\r\n  ACGNOLL2\r\n');
 });
 
 test('run keeps a prior history change log untouched on a later clean re-run', () => {
