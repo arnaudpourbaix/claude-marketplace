@@ -212,46 +212,55 @@ test('formatDestinationCsv writes the header, existing rows, then new rows, CRLF
   assert.equal(lines[3], '');
 });
 
-test('formatChangeLog opens with a count line and a NEW section listing added resrefs', () => {
-  const newRows = [{ file: 'ACGNOLL1' }, { file: 'ACGNOLL2' }];
+test('formatChangeLog opens with a count line and a NEW section of `resref  name` lines', () => {
+  const newRows = [
+    { file: 'ACGNOLL1', name: 'Gnoll Chieftain' },
+    { file: 'ACGNOLL2', name: 'Gnoll Bodyguard' },
+  ];
   const text = formatChangeLog('ac_quest', newRows, []);
   assert.equal(text,
     'ac_quest: 2 new, 0 changed\r\n' +
     '\r\nNEW (2):\r\n' +
-    '  ACGNOLL1\r\n' +
-    '  ACGNOLL2\r\n');
+    '  ACGNOLL1  Gnoll Chieftain\r\n' +
+    '  ACGNOLL2  Gnoll Bodyguard\r\n');
 });
 
-test('formatChangeLog renders a CHANGED section with the field-level old -> new diff', () => {
+test('formatChangeLog omits the name when a creature has none, keeping the resref alone', () => {
+  const text = formatChangeLog('ac_quest', [{ file: 'ACQ10101', name: '' }], []);
+  assert.equal(text, 'ac_quest: 1 new, 0 changed\r\n\r\nNEW (1):\r\n  ACQ10101\r\n');
+});
+
+test('formatChangeLog renders a CHANGED section with the name and the field-level old -> new diff', () => {
   const changedRows = [{
     file: 'AATAQAH',
+    updatedRow: { name: 'Aataqah' },
     changes: [{ field: 'class', oldValue: 'GENIE_DJINNI', newValue: 'GENIE_EFREET' }],
   }];
   const text = formatChangeLog('cdtweaks', [], changedRows);
   assert.equal(text,
     'cdtweaks: 0 new, 1 changed\r\n' +
     '\r\nCHANGED (1):\r\n' +
-    '  AATAQAH\r\n' +
+    '  AATAQAH   Aataqah\r\n' +
     '    class: GENIE_DJINNI -> GENIE_EFREET\r\n');
 });
 
 test('formatChangeLog includes both NEW and CHANGED sections when both are present', () => {
   const text = formatChangeLog(
     'bg1ub',
-    [{ file: 'NEWCRE01' }],
+    [{ file: 'NEWCRE01', name: 'New Guy' }],
     [
-      { file: 'AATAQAH', changes: [{ field: 'class', oldValue: 'A', newValue: 'B' }] },
-      { file: 'ABAZIGAL', changes: [{ field: 'anim', oldValue: 'X', newValue: 'Y' }] },
+      { file: 'AATAQAH', updatedRow: { name: 'Aataqah' }, changes: [{ field: 'class', oldValue: 'A', newValue: 'B' }] },
+      { file: 'ABAZIGAL', updatedRow: { name: 'Abazigal' }, changes: [{ field: 'anim', oldValue: 'X', newValue: 'Y' }] },
     ]
   );
   assert.equal(text,
     'bg1ub: 1 new, 2 changed\r\n' +
     '\r\nNEW (1):\r\n' +
-    '  NEWCRE01\r\n' +
+    '  NEWCRE01  New Guy\r\n' +
     '\r\nCHANGED (2):\r\n' +
-    '  AATAQAH\r\n' +
+    '  AATAQAH   Aataqah\r\n' +
     '    class: A -> B\r\n' +
-    '  ABAZIGAL\r\n' +
+    '  ABAZIGAL  Abazigal\r\n' +
     '    anim: X -> Y\r\n');
 });
 

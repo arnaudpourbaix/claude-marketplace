@@ -159,16 +159,18 @@ function formatDestinationCsv(existingRows, newRows, columns) {
 
 // A per-install record: a count line, then the resrefs this mod added, then
 // each existing creature it modified with the field-level old -> new diff.
-function formatChangeLog(origin, newRows, changedRows) {
+// Each creature line is `<resref>  <display name>` (resref alone if unnamed).
+function formatChangeLog(origin, newRows, changedRows, nameField = 'name') {
+  const creatureLine = (resref, name) => (name ? `  ${resref.padEnd(8)}  ${name}` : `  ${resref}`);
   const lines = [`${origin}: ${newRows.length} new, ${changedRows.length} changed`];
   if (newRows.length > 0) {
     lines.push('', `NEW (${newRows.length}):`);
-    for (const row of newRows) lines.push(`  ${row.file}`);
+    for (const row of newRows) lines.push(creatureLine(row.file, row[nameField]));
   }
   if (changedRows.length > 0) {
     lines.push('', `CHANGED (${changedRows.length}):`);
     for (const entry of changedRows) {
-      lines.push(`  ${entry.file}`);
+      lines.push(creatureLine(entry.file, entry.updatedRow && entry.updatedRow[nameField]));
       for (const c of entry.changes) {
         lines.push(`    ${c.field}: ${c.oldValue} -> ${c.newValue}`);
       }

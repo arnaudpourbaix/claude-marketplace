@@ -103,7 +103,8 @@ function run({ origin, destinationPath, sourcePath, historyDir }) {
   let historyLogPath = null;
   if (!bootstrapping && (newRows.length > 0 || changedRows.length > 0)) {
     historyLogPath = path.join(resolvedHistoryDir, `${seq}_${origin}_changes.log`);
-    fs.writeFileSync(historyLogPath, formatChangeLog(origin, newRows, changedRows));
+    const nameField = inputColumns[inputColumns.length - 1];
+    fs.writeFileSync(historyLogPath, formatChangeLog(origin, newRows, changedRows, nameField));
   }
 
   const summary = `${newRows.length} new creature(s) added (origin=${origin}), ` +

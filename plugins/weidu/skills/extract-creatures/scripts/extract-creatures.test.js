@@ -70,7 +70,8 @@ test('run appends a new creature with the given origin, preserving an embedded q
   const destText = fs.readFileSync(destinationPath, 'utf8');
   assert.match(destText, /BERTRAND;HUMANOID;HUMAN;FIGHTER;MHM1;bertrand;bertrand;cdtweaks;Bertrand the "Companion"\r\n/);
   const logText = fs.readFileSync(path.join(dir, 'history', '001_cdtweaks_changes.log'), 'utf8');
-  assert.equal(logText, 'cdtweaks: 1 new, 0 changed\r\n\r\nNEW (1):\r\n  BERTRAND\r\n');
+  assert.equal(logText,
+    'cdtweaks: 1 new, 0 changed\r\n\r\nNEW (1):\r\n  BERTRAND  Bertrand the "Companion"\r\n');
 });
 
 test('run applies a changed creature to the destination row (new origin, new value) and logs the change', () => {
@@ -92,7 +93,7 @@ test('run applies a changed creature to the destination row (new origin, new val
   assert.ok(!destText.includes(';base;'));
   const logText = fs.readFileSync(path.join(dir, 'history', '001_cdtweaks_changes.log'), 'utf8');
   assert.equal(logText,
-    'cdtweaks: 0 new, 1 changed\r\n\r\nCHANGED (1):\r\n  AATAQAH\r\n    class: GENIE_DJINNI -> GENIE_EFREET\r\n');
+    'cdtweaks: 0 new, 1 changed\r\n\r\nCHANGED (1):\r\n  AATAQAH   Aataqah\r\n    class: GENIE_DJINNI -> GENIE_EFREET\r\n');
 });
 
 test('run writes a history log listing added resrefs for a mod that only adds creatures', () => {
@@ -111,7 +112,9 @@ test('run writes a history log listing added resrefs for a mod that only adds cr
 
   assert.match(summary, /2 new creature\(s\) added \(origin=ac_quest\)/);
   const logText = fs.readFileSync(path.join(dir, 'history', '001_ac_quest_changes.log'), 'utf8');
-  assert.equal(logText, 'ac_quest: 2 new, 0 changed\r\n\r\nNEW (2):\r\n  ACGNOLL1\r\n  ACGNOLL2\r\n');
+  assert.equal(logText,
+    'ac_quest: 2 new, 0 changed\r\n\r\nNEW (2):\r\n' +
+    '  ACGNOLL1  Gnoll Chieftain\r\n  ACGNOLL2  Gnoll Bodyguard\r\n');
 });
 
 test('run keeps a prior history change log untouched on a later clean re-run', () => {
