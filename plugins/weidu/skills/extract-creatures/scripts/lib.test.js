@@ -162,7 +162,37 @@ test('diffCreatures flags a field mismatch as changed without altering destinati
   ]);
   assert.equal(destination.byFile.get('AATAQAH').class, 'GENIE_DJINNI');
   assert.equal(changedRows[0].updatedRow.class, 'GENIE_EFREET');
-  assert.equal(changedRows[0].updatedRow.origin, 'cdtweaks');
+  // origin is immutable — the modifying mod does not take it over
+  assert.equal(changedRows[0].updatedRow.origin, 'base');
+});
+
+test('diffCreatures keeps the original origin on a changed creature — never the modifying mod', () => {
+  const destination = parseDestination(
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;bg1;Aataqah\r\n'
+  );
+  const { rows: inputRows } = parseInput(
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;Aataqah\r\n',
+    'cdtweaks.csv'
+  );
+  const { changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.equal(changedRows.length, 1);
+  assert.equal(changedRows[0].updatedRow.origin, 'bg1');
+});
+
+test('diffCreatures leaves a blank origin blank on a changed creature — it is never filled in by the modifying mod', () => {
+  const destination = parseDestination(
+    'file;general;race;class;anim;deathvar;dialog;origin;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;;Aataqah\r\n'
+  );
+  const { rows: inputRows } = parseInput(
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;Aataqah\r\n',
+    'cdtweaks.csv'
+  );
+  const { changedRows } = diffCreatures(inputRows, destination, 'cdtweaks');
+  assert.equal(changedRows[0].updatedRow.origin, '');
 });
 
 test('diffCreatures ignores a name-only difference — name is not a compared field', () => {
@@ -336,7 +366,7 @@ test('diffCreatures flags a change in a newly added column when both sides carry
   assert.deepEqual(changedRows[0].changes, [
     { field: 'xpv', oldValue: '1400', newValue: '3000' },
   ]);
-  assert.equal(changedRows[0].updatedRow.origin, 'stratagems');
+  assert.equal(changedRows[0].updatedRow.origin, 'base');
 });
 
 test('migrateDestination realigns rows to a wider layout, backfilling from the extraction, no change flagged', () => {

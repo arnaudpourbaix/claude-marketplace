@@ -78,7 +78,7 @@ test('run appends a new creature with the given origin, preserving an embedded q
     'cdtweaks: 1 new, 0 changed\r\n\r\nNEW (1):\r\n  BERTRAND  Bertrand the "Companion"\r\n');
 });
 
-test('run applies a changed creature to the destination row (new origin, new value) and logs the change', () => {
+test('run applies a changed creature to the destination row (origin preserved, new value) and logs the change', () => {
   const dir = makeTmpDir();
   const destinationPath = path.join(dir, 'creatures.csv');
   fs.writeFileSync(destinationPath,
@@ -93,8 +93,8 @@ test('run applies a changed creature to the destination row (new origin, new val
   assert.match(summary, /0 new creature\(s\) added \(origin=cdtweaks\)/);
   assert.match(summary, /1 changed creature\(s\) applied;.*change log .*001_cdtweaks_changes\.log/);
   const destText = fs.readFileSync(destinationPath, 'utf8');
-  assert.match(destText, /AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;cdtweaks;Aataqah\r\n/);
-  assert.ok(!destText.includes(';base;'));
+  assert.match(destText, /AATAQAH;GIANTHUMANOID;GENIE;GENIE_EFREET;DJINNI;aataqah;aataqah;base;Aataqah\r\n/);
+  assert.ok(!destText.includes(';cdtweaks;'));
   const logText = fs.readFileSync(path.join(dir, 'history', '001_cdtweaks_changes.log'), 'utf8');
   assert.equal(logText,
     'cdtweaks: 0 new, 1 changed\r\n\r\nCHANGED (1):\r\n  AATAQAH   Aataqah\r\n    class: GENIE_DJINNI -> GENIE_EFREET\r\n');

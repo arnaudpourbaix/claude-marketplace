@@ -138,10 +138,13 @@ function diffCreatures(inputRows, destination, origin, options = {}) {
       }
     }
     if (changes.length > 0) {
+      // origin records the mod that first introduced the creature and is
+      // immutable: a later mod modifying tracked fields updates those values
+      // but its own origin value is kept, never the modifying mod's.
       changedRows.push({
         file: inputRow[keyField],
         changes,
-        updatedRow: { ...existing, ...inputRow, [ORIGIN_COLUMN]: origin },
+        updatedRow: { ...existing, ...inputRow, [ORIGIN_COLUMN]: existing[ORIGIN_COLUMN] },
       });
     }
   }
