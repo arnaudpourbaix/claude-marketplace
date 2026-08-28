@@ -36,9 +36,10 @@ test('parseArgs defaults --source and --history to null and honors them when giv
 test('run bootstraps an empty destination from a base extraction, writing CRLF', () => {
   const dir = makeTmpDir();
   const destinationPath = path.join(dir, 'creatures.csv');
-  fs.writeFileSync(path.join(dir, 'source.csv'),
+  const sourceText =
     'file;general;race;class;anim;deathvar;dialog;name\r\n' +
-    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n');
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n';
+  fs.writeFileSync(path.join(dir, 'source.csv'), sourceText);
 
   const { summary, warnings } = run({ origin: 'base', destinationPath });
 
@@ -48,8 +49,11 @@ test('run bootstraps an empty destination from a base extraction, writing CRLF',
   assert.match(destText, /AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;base;Aataqah\r\n/);
   const snapshot = path.join(dir, 'history', '001_base.csv');
   assert.equal(fs.existsSync(snapshot), true);
-  assert.equal(fs.readFileSync(snapshot, 'utf8'), fs.readFileSync(path.join(dir, 'source.csv'), 'utf8'));
+  assert.equal(fs.readFileSync(snapshot, 'utf8'), sourceText);
   assert.equal(fs.existsSync(path.join(dir, 'history', '001_base_changes.log')), false);
+  // the default source.csv is consumed and removed on a clean success
+  assert.equal(fs.existsSync(path.join(dir, 'source.csv')), false);
+  assert.match(summary, /source\.csv removed/);
 });
 
 test('run appends a new creature with the given origin, preserving an embedded quote in the name', () => {
@@ -135,9 +139,10 @@ test('run keeps a prior history change log untouched on a later clean re-run', (
 
   assert.match(summary, /0 changed creature\(s\) applied;/);
   assert.equal(fs.existsSync(priorLog), true);
-  // the clean re-run still writes its own snapshot under the next number
-  assert.equal(fs.existsSync(path.join(dir, 'history', '002_cdtweaks.csv')), true);
+  // the clean re-run writes nothing new — no snapshot, no log, no sequence bump
+  assert.equal(fs.existsSync(path.join(dir, 'history', '002_cdtweaks.csv')), false);
   assert.equal(fs.existsSync(path.join(dir, 'history', '002_cdtweaks_changes.log')), false);
+  assert.match(summary, /no changes — no history snapshot/);
 });
 
 test('run reads the extraction from an explicit --source snapshot', () => {
@@ -177,16 +182,72 @@ test('run migrates a narrower existing destination to the current column set', (
 test('run numbers history snapshots incrementally across mods', () => {
   const dir = makeTmpDir();
   const destinationPath = path.join(dir, 'creatures.csv');
-  fs.writeFileSync(path.join(dir, 'source.csv'),
-    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
-    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n');
+  const header = 'file;general;race;class;anim;deathvar;dialog;name\r\n';
+  const cre = (f) =>
+    `${f};GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;${f.toLowerCase()};${f.toLowerCase()};${f}\r\n`;
+  // each run's extraction adds one more creature, so every run is a real change
+  const writeSource = (...files) =>
+    fs.writeFileSync(path.join(dir, 'source.csv'), header + files.map(cre).join(''));
+
+  writeSource('AATAQAH');
   run({ origin: 'base', destinationPath });
+  writeSource('AATAQAH', 'BERTRAND');
   run({ origin: 'cdtweaks', destinationPath });
+  writeSource('AATAQAH', 'BERTRAND', 'CORWIN');
   run({ origin: 'stratagems', destinationPath });
+  writeSource('AATAQAH', 'BERTRAND', 'CORWIN', 'DYNAHEIR');
   run({ origin: 'stratagems', destinationPath });
 
-  const names = fs.readdirSync(path.join(dir, 'history')).sort();
+  const names = fs.readdirSync(path.join(dir, 'history')).filter((n) => n.endsWith('.csv')).sort();
   assert.deepEqual(names, ['001_base.csv', '002_cdtweaks.csv', '003_stratagems.csv', '004_stratagems.csv']);
+});
+
+test('run writes no history snapshot on a clean re-run (nothing added or changed)', () => {
+  const dir = makeTmpDir();
+  const destinationPath = path.join(dir, 'creatures.csv');
+  const sourceText =
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n';
+  fs.writeFileSync(path.join(dir, 'source.csv'), sourceText);
+  run({ origin: 'base', destinationPath });
+  fs.writeFileSync(path.join(dir, 'source.csv'), sourceText);
+  const { summary } = run({ origin: 'cdtweaks', destinationPath });
+
+  assert.match(summary, /no changes — no history snapshot/);
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'history')).sort(), ['001_base.csv']);
+});
+
+test('run removes the default source.csv on a clean success but spares --source and warning runs', () => {
+  const good =
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'AATAQAH;GIANTHUMANOID;GENIE;GENIE_DJINNI;DJINNI;aataqah;aataqah;Aataqah\r\n';
+
+  // default source.csv, no warnings -> removed
+  const dir = makeTmpDir();
+  const defaultSource = path.join(dir, 'source.csv');
+  fs.writeFileSync(defaultSource, good);
+  run({ origin: 'base', destinationPath: path.join(dir, 'creatures.csv') });
+  assert.equal(fs.existsSync(defaultSource), false);
+
+  // explicit --source -> left in place
+  const dir2 = makeTmpDir();
+  const snap = path.join(dir2, 'snap.csv');
+  fs.writeFileSync(snap, good);
+  const { summary } = run({ origin: 'base', destinationPath: path.join(dir2, 'creatures.csv'), sourcePath: snap });
+  assert.equal(fs.existsSync(snap), true);
+  assert.doesNotMatch(summary, /source\.csv removed/);
+
+  // default source.csv but the run produced warnings -> left in place for inspection
+  const dir3 = makeTmpDir();
+  const src3 = path.join(dir3, 'source.csv');
+  fs.writeFileSync(path.join(dir3, 'creatures.csv'), 'file;general;race;class;anim;deathvar;dialog;origin;name\r\n');
+  fs.writeFileSync(src3,
+    'file;general;race;class;anim;deathvar;dialog;name\r\n' +
+    'BADROW;ONLYTWO\r\n' +
+    'NEWCRE01;HUMANOID;HUMAN;FIGHTER;MHM1;newcre01;newcre01;New Guy\r\n');
+  const { warnings } = run({ origin: 'cdtweaks', destinationPath: path.join(dir3, 'creatures.csv') });
+  assert.equal(warnings.length, 1);
+  assert.equal(fs.existsSync(src3), true);
 });
 
 test('run skips a malformed row with a warning and still processes the rest', () => {

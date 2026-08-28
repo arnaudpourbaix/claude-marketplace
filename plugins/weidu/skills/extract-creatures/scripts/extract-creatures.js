@@ -86,32 +86,52 @@ function run({ origin, destinationPath, sourcePath, historyDir }) {
     compareFields,
   });
 
-  if (migrated || newRows.length > 0 || changedRows.length > 0) {
+  const destinationChanged = migrated || newRows.length > 0 || changedRows.length > 0;
+  if (destinationChanged) {
     const updatedByFile = new Map(changedRows.map((c) => [c.file, c.updatedRow]));
     const updatedExistingRows = destination.rows.map((row) => updatedByFile.get(row[keyField]) || row);
     fs.writeFileSync(destinationPath, formatDestinationCsv(updatedExistingRows, newRows, wantedColumns));
   }
 
-  const resolvedHistoryDir = historyDir || path.join(destinationDir, 'history');
-  fs.mkdirSync(resolvedHistoryDir, { recursive: true });
-  const seq = String(nextHistorySequence(resolvedHistoryDir)).padStart(3, '0');
-  const historyCsvPath = path.join(resolvedHistoryDir, `${seq}_${origin}.csv`);
-  fs.copyFileSync(inputPath, historyCsvPath);
-
-  // Log this install's footprint (added + modified creatures). Skipped when
-  // bootstrapping — the 001 snapshot already *is* the full initial roster.
+  // A history snapshot only earns its place when the run actually moved state:
+  // a creature was added or modified, or the column layout was migrated. A clean
+  // re-run's extraction is byte-identical to the newest snapshot already on disk,
+  // so copying it again would just add noise and burn a sequence number.
+  let historyCsvPath = null;
   let historyLogPath = null;
-  if (!bootstrapping && (newRows.length > 0 || changedRows.length > 0)) {
-    historyLogPath = path.join(resolvedHistoryDir, `${seq}_${origin}_changes.log`);
-    const nameField = inputColumns[inputColumns.length - 1];
-    fs.writeFileSync(historyLogPath, formatChangeLog(origin, newRows, changedRows, nameField));
+  if (destinationChanged) {
+    const resolvedHistoryDir = historyDir || path.join(destinationDir, 'history');
+    fs.mkdirSync(resolvedHistoryDir, { recursive: true });
+    const seq = String(nextHistorySequence(resolvedHistoryDir)).padStart(3, '0');
+    historyCsvPath = path.join(resolvedHistoryDir, `${seq}_${origin}.csv`);
+    fs.copyFileSync(inputPath, historyCsvPath);
+
+    // Log this install's footprint (added + modified creatures). Skipped when
+    // bootstrapping — the 001 snapshot already *is* the full initial roster.
+    if (!bootstrapping && (newRows.length > 0 || changedRows.length > 0)) {
+      historyLogPath = path.join(resolvedHistoryDir, `${seq}_${origin}_changes.log`);
+      const nameField = inputColumns[inputColumns.length - 1];
+      fs.writeFileSync(historyLogPath, formatChangeLog(origin, newRows, changedRows, nameField));
+    }
+  }
+
+  // The default source.csv is the extract component's raw dump — transient input
+  // with no use once the merge succeeds (its content is now in history/, or was
+  // already identical to the latest snapshot). Remove it so a later stray run
+  // can't silently read stale data. Left alone when the caller passed an explicit
+  // --source (their file), or when warnings flag a snapshot worth inspecting.
+  let sourceRemoved = false;
+  if (!sourcePath && warnings.length === 0 && fs.existsSync(inputPath)) {
+    fs.rmSync(inputPath);
+    sourceRemoved = true;
   }
 
   const summary = `${newRows.length} new creature(s) added (origin=${origin}), ` +
     `${changedRows.length} changed creature(s) applied` +
     (migrated ? `, destination migrated to ${wantedColumns.length} columns` : '') +
-    `; history snapshot ${historyCsvPath}` +
-    (historyLogPath ? `, change log ${historyLogPath}` : '');
+    `; ${historyCsvPath ? `history snapshot ${historyCsvPath}` : 'no changes — no history snapshot'}` +
+    (historyLogPath ? `, change log ${historyLogPath}` : '') +
+    (sourceRemoved ? '; source.csv removed' : '');
 
   return { summary, warnings };
 }
